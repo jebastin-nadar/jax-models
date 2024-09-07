@@ -13,9 +13,10 @@ class DropPath(nn.Module):
 
         keep_prob = 1 - self.drop_prob
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        rng = self.make_rng("drop_path")
-        random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape) / keep_prob
-        return x * random_tensor
+        rng = self.make_rng("dropout")
+        mask = jax.random.bernoulli(key=rng, p=keep_prob, shape=shape)
+        mask = jnp.broadcast_to(mask, x.shape)
+        return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))
 
 
 class SqueezeExcite(nn.Module):

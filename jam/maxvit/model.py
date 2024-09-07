@@ -77,11 +77,14 @@ class MaxVitStage(nn.Module):
 
 class MaxVit(nn.Module):
     img_size: List[int]
-    num_classes: int
     stem_width: int
     emb_dims: List[int]
     depths: List[int]
     dim_head: int = 32
+    num_classes: int = 1000
+    features_only: bool = False
+    attn_drop: float = 0.0
+    proj_drop: float = 0.0
     drop_rate: float = 0.0
     drop_path_rate: float = 0.0
 
@@ -96,27 +99,29 @@ class MaxVit(nn.Module):
         partition_size = [self.img_size[0] // 32, self.img_size[1] // 32]
         inp_dim = self.stem_width
 
-        stages = []
+        feat_maps = []
         for i, depth in enumerate(self.depths):
-            stages.append(
-                MaxVitStage(
-                    inp_dim,
-                    self.emb_dims[i],
-                    self.dim_head,
-                    depth,
-                    partition_size,
-                    dpr[i],
-                    self.drop_rate,
-                    self.drop_rate,
-                    name=f"stages_{i}",
-                )
-            )
+            x = MaxVitStage(
+                inp_dim,
+                self.emb_dims[i],
+                self.dim_head,
+                depth,
+                partition_size,
+                dpr[i],
+                self.attn_drop,
+                self.proj_drop,
+                name=f"stages_{i}",
+            )(x, train)["x"]
+            feat_maps.append(x)
             inp_dim = self.emb_dims[i]
 
-        x = nn.Sequential(stages)(x, train)["x"]
-        x = jnp.mean(x, axis=(1, 2))
-        x = nn.LayerNorm(epsilon=1e-5, name="head_norm")(x)
-        x = nn.Dense(self.emb_dims[-1], name="head_pre_logits_fc")(x)
-        x = nn.tanh(x)
-        x = nn.Dense(self.num_classes, name="head_fc")(x)
-        return x
+        if self.features_only:
+            return feat_maps
+        else:
+            x = jnp.mean(x, axis=(1, 2))
+            x = nn.LayerNorm(epsilon=1e-5, name="head_norm")(x)
+            x = nn.Dense(self.emb_dims[-1], name="head_pre_logits_fc")(x)
+            x = nn.tanh(x)
+            x = nn.Dropout(self.drop_rate)(x)
+            logits = nn.Dense(self.num_classes, name="head_fc")(x)
+            return logits

@@ -98,6 +98,6 @@ class EfficientNetV2(nn.Module):
             x = nn.BatchNorm(use_running_average=not train, momentum=0.9, name="bn2")(x)
             x = nn.silu(x)
             x = jnp.mean(x, axis=(1, 2))
-            # x = nn.Dropout(self.drop_rate)(x)
+            x = nn.Dropout(self.drop_rate)(x)
             logits = nn.Dense(self.num_classes, name="classifier")(x)
             return logits
